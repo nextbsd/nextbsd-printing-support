@@ -1,0 +1,26 @@
+Description: Link the ipp backend without Mach-O sections or codesign off macOS
+ Apple's backend/Makefile links the ipp backend with
+ -Wl,-sectcreate,__TEXT,__info_plist (a Mach-O section) and then runs
+ /usr/bin/codesign with its entitlements, unconditionally. Neither exists for
+ ELF. Keep both on Darwin, as CUPS's scheduler/Makefile already decides with
+ `uname`, and link plainly elsewhere.
+Origin: NextBSD
+Forwarded: not-needed (Apple's CUPS is built only for macOS)
+---
+--- a/cups/backend/Makefile
++++ b/cups/backend/Makefile
+@@ -257,8 +257,12 @@
+ 
+ ipp:	ipp.o ../cups/$(LIBCUPS) libbackend.a
+ 	echo Linking $@...
+-	$(LD_CC) $(ALL_LDFLAGS) -Wl,-sectcreate,__TEXT,__info_plist,$(SRCROOT)/ipp.plist -o ipp ipp.o libbackend.a $(LINKCUPS)
+-	/usr/bin/codesign --force --sign "$(CODE_SIGN_IDENTITY)" --entitlements $(SRCROOT)/ipp.entitlements $@
++	if test "x`uname`" = xDarwin; then \
++		$(LD_CC) $(ALL_LDFLAGS) -Wl,-sectcreate,__TEXT,__info_plist,$(SRCROOT)/ipp.plist -o ipp ipp.o libbackend.a $(LINKCUPS) && \
++		/usr/bin/codesign --force --sign "$(CODE_SIGN_IDENTITY)" --entitlements $(SRCROOT)/ipp.entitlements $@; \
++	else \
++		$(LD_CC) $(ALL_LDFLAGS) -o ipp ipp.o libbackend.a $(LINKCUPS); \
++	fi
+ 	$(RM) http https ipps
+ 	for file in $(IPPALIASES); do \
+ 		$(LN) ipp $$file; \

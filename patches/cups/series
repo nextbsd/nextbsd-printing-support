@@ -3,3 +3,4 @@
 0001-launchd-find-launch_activate_socket-in-liblaunch.patch
 0002-dnssd-build-ippfind-with-mdnsresponder.patch
 0003-build-outside-macos.patch
+0004-ipp-backend-link-without-macho-sections.patch
