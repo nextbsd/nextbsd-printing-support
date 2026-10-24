@@ -42,7 +42,7 @@ decision D5, step 10; epic nextbsd/nextbsd#574, ticket nextbsd/nextbsd-printing-
 | | |
 |---|---|
 | Source | Apple `cups-522.4` (CUPS 2.3.4, Apache-2.0 with the CUPS exceptions) |
-| Installs | `libcups.so.2`, `libcupsimage.so.2`, headers, `cups-config`; `cupsd`, `cupsfilter`, `lpadmin`, `lpinfo`, `lpmove`, `lpc`, `cupsctl`, `cupsaccept`/`cupsreject`, `cupsenable`/`cupsdisable` in `/usr/sbin`; `lp`, `lpr`, `lpq`, `lprm`, `lpstat`, `lpoptions`, `cancel`, `ippfind`, `ipptool`, `ippeveprinter` in `/usr/bin`; backends, CGIs, daemons and filters in `/usr/libexec/cups`; data in `/usr/share/cups`; docs in `/usr/share/doc/cups`; man pages |
+| Installs | `libcups.so.2`, `libcupsimage.so.2`, headers, `cups-config`; `cupsd`, `cupsfilter`, `lpadmin`, `lpinfo`, `lpmove`, `lpc`, `cupsctl`, `cupsaccept`/`cupsreject`, `cupsenable`/`cupsdisable` in `/usr/sbin`; `lp`, `lpr`, `lpq`, `lprm`, `lpstat`, `lpoptions`, `cancel`, `ippfind`, `ipptool`, `ippeveprinter`, `cupstestppd` and the PPD compiler tools (`ppdc`, `ppdhtml`, `ppdi`, `ppdmerge`, `ppdpo`) in `/usr/bin`; backends, CGIs, daemons and filters in `/usr/libexec/cups`; data in `/usr/share/cups`; docs in `/usr/share/doc/cups`; man pages |
 | TLS | GnuTLS 3.8 from nextbsd-gnustep-support (Apple's CUPS has only SecureTransport and GnuTLS backends) |
 | DNS-SD | mDNSResponder: NextBSD's `dns_sd.h` and `libdns_sd` (nextbsd-userland). CUPS 2.3 spells it `--disable-avahi --enable-dnssd`; CUPS 2.4 calls the same choice `--with-dnssd=mdnsresponder` |
 | Other | base MIT Kerberos (GSSAPI), PAM (`/etc/pam.d/cups`), libusb (the `usb` backend), zlib |
