@@ -2,3 +2,4 @@
 # -p1 from the top of the tag archive (Apple's tree keeps CUPS under cups/).
 0001-launchd-find-launch_activate_socket-in-liblaunch.patch
 0002-dnssd-build-ippfind-with-mdnsresponder.patch
+0003-build-outside-macos.patch

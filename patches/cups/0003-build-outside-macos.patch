@@ -1,0 +1,74 @@
+Description: Build Apple's CUPS outside macOS
+ Apple's cups-522.4 adds macOS-only code to CUPS 2.3.4 that its non-Apple
+ branches never compiled:
+  - http-private.h uses bool (disableDH) without <stdbool.h>, which macOS
+    headers pull in indirectly;
+  - scheduler/conf.c includes <os/log.h> and <AssertMacros.h> unguarded
+    (cupsdCheckPermissions() was rewritten with __Require_Action and
+    __Require_noErr_Action), and stops with #error when the managed
+    configuration API isn't there;
+  - backend/ipp.c includes <os/log.h> unguarded, though nothing in it uses
+    os_log.
+ Include <stdbool.h>; keep the Apple headers and the #error for __APPLE__;
+ elsewhere define the two AssertMacros.h checks with their macOS meaning.
+ macOS builds are unchanged.
+Origin: NextBSD
+Forwarded: not-needed (Apple's CUPS is built only for macOS)
+---
+--- a/cups/cups/http-private.h
++++ b/cups/cups/http-private.h
+@@ -19,6 +19,7 @@
+ #  include <cups/language.h>
+ #  include <stddef.h>
+ #  include <stdlib.h>
++#  include <stdbool.h>
+ 
+ #  ifdef __sun
+ #    include <sys/select.h>
+--- a/cups/scheduler/conf.c
++++ b/cups/scheduler/conf.c
+@@ -34,8 +34,20 @@
+ #define _HAS_mcf_service_path_for_service_type  1
+ #endif
+ 
+-#include <os/log.h>
+-#include <AssertMacros.h>
++#ifdef __APPLE__
++#  include <os/log.h>
++#  include <AssertMacros.h>
++#else
++/*
++ * The two AssertMacros.h checks cupsdCheckPermissions() uses, with the same
++ * meaning: if the assertion fails (or the error code is non-zero), run the
++ * action and jump to the label.
++ */
++#  define __Require_Action(assertion, exceptionLabel, action) \
++	do { if (__builtin_expect(!(assertion), 0)) { { action; } goto exceptionLabel; } } while (0)
++#  define __Require_noErr_Action(errorCode, exceptionLabel, action) \
++	do { if (__builtin_expect(0 != (errorCode), 0)) { { action; } goto exceptionLabel; } } while (0)
++#endif /* __APPLE__ */
+ /*
+  * Possibly missing network definitions...
+  */
+@@ -4532,7 +4544,7 @@
+       }
+     }
+   }
+-#else
++#elif defined(__APPLE__)
+ #error "check build flags - we should have this"
+ #endif
+ 
+--- a/cups/backend/ipp.c
++++ b/cups/backend/ipp.c
+@@ -18,7 +18,9 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <sys/wait.h>
+-#include <os/log.h>
++#ifdef __APPLE__
++#  include <os/log.h>
++#endif /* __APPLE__ */
+ 
+ #if defined(HAVE_GSSAPI) && defined(HAVE_XPC)
+ #  include <xpc/xpc.h>

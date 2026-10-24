@@ -92,6 +92,11 @@ export PKG_CONFIG=pkgconf
 export PKG_CONFIG_LIBDIR="$SYSROOT$PCDIR"
 export PKG_CONFIG_SYSROOT_DIR="$SYSROOT"
 unset PKG_CONFIG_PATH
+# The sysroot's /usr/lib and /usr/include are the compiler's own (clang
+# --sysroot), so pkgconf leaves them out of --libs and --cflags: otherwise
+# `-L<sysroot>/usr/lib` would end up in what CUPS records for cups-config.
+export PKG_CONFIG_SYSTEM_LIBRARY_PATH="$SYSROOT/usr/lib:$SYSROOT/lib"
+export PKG_CONFIG_SYSTEM_INCLUDE_PATH="$SYSROOT/usr/include"
 
 READELF="$CROSS_BINDIR/llvm-readelf"
 
@@ -332,7 +337,7 @@ build_cups() {
         grep -q '^ONDEMANDLIBS[[:space:]]*=[[:space:]]*-llaunch$' Makedefs || fail "cupsd does not link -llaunch"
         grep -q '^IPPFIND_BIN[[:space:]]*=[[:space:]]*ippfind$' Makedefs || fail "ippfind is not built"
         grep -q '^LAUNCHD_DIR[[:space:]]*=[[:space:]]*$' Makedefs || fail "upstream's org.cups.* launchd plists would be installed"
-        make $JOBS
+        make -k $JOBS || { echo "=== config.h ==="; cat config.h; echo "=== Makedefs ==="; cat Makedefs; exit 1; }  # DIAG
         make install DESTDIR="$COMP_ROOT"
     )
     tidy_cups "$src"
