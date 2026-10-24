@@ -337,7 +337,7 @@ build_cups() {
         grep -q '^ONDEMANDLIBS[[:space:]]*=[[:space:]]*-llaunch$' Makedefs || fail "cupsd does not link -llaunch"
         grep -q '^IPPFIND_BIN[[:space:]]*=[[:space:]]*ippfind$' Makedefs || fail "ippfind is not built"
         grep -q '^LAUNCHD_DIR[[:space:]]*=[[:space:]]*$' Makedefs || fail "upstream's org.cups.* launchd plists would be installed"
-        make -k $JOBS || { echo "=== config.h ==="; cat config.h; echo "=== Makedefs ==="; cat Makedefs; exit 1; }  # DIAG
+        make $JOBS
         make install DESTDIR="$COMP_ROOT"
     )
     tidy_cups "$src"

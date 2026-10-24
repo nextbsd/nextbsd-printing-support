@@ -47,6 +47,7 @@ decision D5, step 10; epic nextbsd/nextbsd#574, ticket nextbsd/nextbsd-printing-
 | DNS-SD | mDNSResponder: NextBSD's `dns_sd.h` and `libdns_sd` (nextbsd-userland). CUPS 2.3 spells it `--disable-avahi --enable-dnssd`; CUPS 2.4 calls the same choice `--with-dnssd=mdnsresponder` |
 | Other | base MIT Kerberos (GSSAPI), PAM (`/etc/pam.d/cups`), libusb (the `usb` backend), zlib |
 | Off | Avahi, D-Bus, systemd, upstart, xinetd, rc scripts, the web interface by default (as on macOS; `cupsctl WebInterface=yes`) |
+| macOS-only | Apple's `CUPS_FILES_LOCKDOWN` (cupsd ignores `cups-files.conf` and uses its compiled defaults) is `__APPLE__`-only upstream and stays off; so are the managed-configuration directory, the sandbox, SecureTransport and the PrintUITool/XPC bearer tokens |
 
 The configure line (`build_cups` in `build-printing-support.sh`):
 
@@ -81,6 +82,8 @@ asserts what it found (`HAVE_LAUNCHD`, `HAVE_DNSSD`, `HAVE_GNUTLS`,
 |---|---|
 | `0001-launchd-find-launch_activate_socket-in-liblaunch` | On macOS `launch_activate_socket()` is in libSystem; on NextBSD it is in liblaunch. configure now also looks in `-llaunch`, and links it into cupsd only |
 | `0002-dnssd-build-ippfind-with-mdnsresponder` | A misplaced comma in `cups-dnssd.m4` dropped `ippfind` whenever mDNSResponder was found outside Darwin |
+| `0003-build-outside-macos` | Apple's macOS-only additions that never compiled elsewhere: unguarded `<os/log.h>` and `<AssertMacros.h>` (`cupsdCheckPermissions()` uses `__Require_Action`), an `#error` without the managed-configuration API, `bool` without `<stdbool.h>`, SecureTransport's DH retry, `nil`, CoreFoundation's `Boolean`, the `__BLOCKS__` telemetry calls, `_CS_DARWIN_USER_TEMP_DIR`, and a typo in a GnuTLS stub. macOS builds are unchanged |
+| `0004-ipp-backend-link-without-macho-sections` | `backend/Makefile` links `ipp` with a Mach-O `__info_plist` section and runs `codesign`; both are kept for Darwin only |
 
 ### launchd: `org.nextbsd.cupsd`
 
