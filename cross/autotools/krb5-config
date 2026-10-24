@@ -1,0 +1,32 @@
+#!/bin/sh
+# Cross stand-in for krb5-config(1), for configure scripts that ask it for
+# Kerberos/GSSAPI flags (CUPS: `krb5-config --cflags gssapi`, `--libs gssapi`).
+#
+# The base's own /usr/bin/krb5-config is a target script that prints host
+# paths (-L/usr/lib), which would send the cross linker to the runner's
+# libraries. This answers from base MIT Kerberos's .pc files through pkgconf
+# instead, against the sysroot only (PKG_CONFIG_LIBDIR and
+# PKG_CONFIG_SYSROOT_DIR come from common.site), and prints only -l flags and
+# non-path cflags: the libraries and headers are in the sysroot's /usr, which
+# clang --sysroot searches already, so no build path ends up in cups-config.
+#
+# Usage: krb5-config [--cflags|--libs|--version|--vendor|--prefix|--exec-prefix] [krb5|gssapi]
+set -eu
+what="" mod=mit-krb5
+for a in "$@"; do
+    case "$a" in
+        --cflags|--libs|--version|--vendor|--prefix|--exec-prefix) what="$a" ;;
+        krb5)   mod=mit-krb5 ;;
+        gssapi) mod="mit-krb5-gssapi mit-krb5" ;;   # as MIT krb5-config: -lgssapi_krb5 -lkrb5 -lk5crypto -lcom_err
+        *) echo "krb5-config (cross): unsupported argument $a" >&2; exit 1 ;;
+    esac
+done
+${PKG_CONFIG:-pkgconf} --exists $mod || { echo "krb5-config (cross): $mod.pc not found in the sysroot" >&2; exit 1; }
+case "$what" in
+    --cflags) ${PKG_CONFIG:-pkgconf} --cflags $mod | tr ' ' '\n' | grep -v '^-I' | tr '\n' ' '; echo ;;
+    --libs)   ${PKG_CONFIG:-pkgconf} --libs $mod | tr ' ' '\n' | grep -v '^-L' | tr '\n' ' '; echo ;;
+    --version) echo "Kerberos 5 release $(${PKG_CONFIG:-pkgconf} --modversion mit-krb5)" ;;
+    --vendor) echo "Massachusetts Institute of Technology" ;;
+    --prefix|--exec-prefix) echo /usr ;;
+    *) echo "usage: krb5-config --cflags|--libs|--version|--vendor|--prefix|--exec-prefix [krb5|gssapi]" >&2; exit 1 ;;
+esac

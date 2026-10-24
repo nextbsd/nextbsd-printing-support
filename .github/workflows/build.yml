@@ -1,0 +1,126 @@
+name: Build NextBSD printing-support (Apple's CUPS)
+
+# Cross-builds NextBSD's printing system (E24, nextbsd/nextbsd#574, plan D5,
+# step 10): Apple's CUPS 2.3.4 (cups-522.4) into /usr, plus the
+# org.nextbsd.cupsd launchd job, for amd64 and arm64 on the x86_64 runner,
+# inside the per-arch nextbsd-kernel-toolchain container, from the pinned
+# tarball in sources.lock. The sysroot is compat's `continuous` base with the
+# `continuous` artifacts of nextbsd-userland (liblaunch, mDNSResponder's
+# dns_sd) and nextbsd-gnustep-support (GnuTLS) on top.
+# Same shape as nextbsd-xlibs (wiki: Source-Repo-Conventions).
+#
+# Builds run by hand, in order, after their upstream repos (rebuild policy):
+# there is no repository_dispatch trigger here, and nothing is dispatched to
+# any other repo. Pull requests build only; a push to main or a manual run
+# also publishes nextbsd-printing-support-<arch>.tar.gz to the `continuous`
+# release. Packaging (nextbsd-pkg) is run by hand.
+
+on:
+  push:
+    branches: [main]
+    paths: ['build-printing-support.sh', 'sources.lock', 'patches/**', 'cross/**', 'launchd/**', '.github/workflows/build.yml']
+  pull_request:
+    paths: ['build-printing-support.sh', 'sources.lock', 'patches/**', 'cross/**', 'launchd/**', '.github/workflows/build.yml']
+  workflow_dispatch:
+    inputs:
+      fbsd_sha:
+        description: 'Pinned FreeBSD SHA for the toolchain image tag (blank = latest)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    name: printing-support (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, target_arch: amd64 }
+          - { arch: arm64, target_arch: aarch64 }
+    container:
+      # Per-arch toolchain image: the pinned llvmorg-19.1.7 clang, lld and LLVM
+      # binutils at $CROSS_BINDIR, plus pkgconf and the autotools
+      # (nextbsd-toolchain#13). Nothing is apt-installed here.
+      image: ghcr.io/nextbsd/nextbsd-kernel-toolchain:${{ matrix.arch }}-${{ inputs.fbsd_sha && format('fbsd-{0}', inputs.fbsd_sha) || 'latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Stage the cross sysroot, in the order the repos build:
+      #   1. compat's base: libc, libz, PAM, MIT Kerberos/GSSAPI, libusb,
+      #      headers and /usr/libdata/pkgconfig;
+      #   2. nextbsd-userland: liblaunch (launch_activate_socket(),
+      #      nextbsd-userland#447) and mDNSResponder's dns_sd.h/libdns_sd, in
+      #      /usr/include and /usr/lib/system;
+      #   3. nextbsd-gnustep-support: GnuTLS (with nettle, hogweed and gmp).
+      # All public reads, so the built-in token is enough and fork PRs work.
+      # build-printing-support.sh installs each component into this sysroot
+      # as it goes.
+      - name: Stage sysroot from compat, userland and gnustep-support continuous
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/sysroot"
+          gh release download continuous \
+            --repo nextbsd/nextbsd-freebsd-compat \
+            --pattern "nextbsd-base-${{ matrix.arch }}.tar.gz" \
+            --output /tmp/base.tar.gz --clobber
+          gh release download continuous \
+            --repo nextbsd/nextbsd-userland \
+            --pattern "nextbsd-userland-${{ matrix.arch }}.tar.gz" \
+            --output /tmp/userland.tar.gz --clobber
+          gh release download continuous \
+            --repo nextbsd/nextbsd-gnustep-support \
+            --pattern "nextbsd-gnustep-support-${{ matrix.arch }}.tar.gz" \
+            --output /tmp/gnustep-support.tar.gz --clobber
+          for t in base userland gnustep-support; do
+            tar -C "$GITHUB_WORKSPACE/sysroot" -xzf "/tmp/$t.tar.gz"
+          done
+
+      - name: Build printing-support into /stage
+        env:
+          T: ${{ matrix.arch }}
+          TA: ${{ matrix.target_arch }}
+          SYSROOT: ${{ github.workspace }}/sysroot
+          DESTDIR: /stage
+        run: ./build-printing-support.sh
+
+      # Raw tar of /stage rooted at /: the whole install under /usr, headers,
+      # cups-config and man pages included, plus the launchd job in
+      # /System/Library/LaunchDaemons. Splitting runtime from development
+      # files is nextbsd-pkg's job.
+      - name: Pack printing-support artifact
+        run: |
+          tar -C /stage -czf "/tmp/nextbsd-printing-support-${{ matrix.arch }}.tar.gz" .
+          tar -tzvf "/tmp/nextbsd-printing-support-${{ matrix.arch }}.tar.gz" | grep -v '/$' || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextbsd-printing-support-${{ matrix.arch }}
+          path: /tmp/nextbsd-printing-support-${{ matrix.arch }}.tar.gz
+
+  publish:
+    needs: build
+    # Pushes to main and manual runs from main; never pull requests.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Gather artifacts
+        run: |
+          mkdir -p out
+          find artifacts -name 'nextbsd-printing-support-*.tar.gz' -exec cp {} out/ \;
+          ls -la out/
+      - name: Publish to continuous release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: Continuous printing-support build
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: out/*.tar.gz
+      # That is where this stops: nothing downstream is dispatched or rebuilt.

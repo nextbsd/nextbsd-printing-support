@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  org.nextbsd.cupsd.plist
+
+  launchd job for the CUPS scheduler (Apple's CUPS 2.3.4, cups-522.4),
+  adapted from Apple's org.cups.cupsd.plist. Installed by
+  nextbsd-printing-support into /System/Library/LaunchDaemons.
+
+  Socket activation, as on macOS: launchd owns the local socket
+  /var/run/cupsd (the "Listeners" entry) and starts cupsd when a client
+  connects. `cupsd -l` collects that socket with launch_activate_socket()
+  (liblaunch, nextbsd-userland#447), then exits by itself after
+  IdleExitTimeout (60 s by default) once it has no jobs, no shared printers
+  to advertise and no clients; the next connection starts it again. The
+  TCP listener (localhost:631 from cupsd.conf) is opened by cupsd while it
+  runs, as on macOS.
+
+  Apple's plist keeps cupsd running through KeepAlive/PathState on the file
+  cupsd writes while it has work (/var/spool/cups/cache/org.cups.cupsd).
+  NextBSD's launchd doesn't act on PathState, so this job doesn't use it.
+  RunAtLoad does that job instead: cupsd starts once when the job loads at
+  boot, resumes any queued jobs and advertises shared printers, and stays
+  only while it has work; otherwise it exits after the idle timeout. There
+  is no KeepAlive: if cupsd stops for any reason, launchd keeps the socket
+  and the next client starts it again, so a failing cupsd never loops.
+
+  Apple's CUPS_DEBUG_* environment and the macOS-only keys (ProcessType,
+  EnableTransactions, TransactionTimeLimitEnabled) are dropped.
+
+  Nothing goes to the console: cupsd logs to /var/log/cups/ (ErrorLog,
+  AccessLog, PageLog in cups-files.conf), and anything it writes to
+  stdout/stderr goes to /var/log/cupsd.stderr, like the other daemons'
+  *.stderr files.
+
+  SockPathMode 49663 is 0140777 (a socket, mode 0777), as in Apple's plist:
+  any local user may connect; cupsd.conf's policies decide what they may do.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>org.nextbsd.cupsd</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/sbin/cupsd</string>
+		<string>-l</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>ExitTimeOut</key>
+	<integer>60</integer>
+	<key>Sockets</key>
+	<dict>
+		<key>Listeners</key>
+		<array>
+			<dict>
+				<key>SockPathName</key>
+				<string>/var/run/cupsd</string>
+				<key>SockPathMode</key>
+				<integer>49663</integer>
+			</dict>
+		</array>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/var/log/cupsd.stderr</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/cupsd.stderr</string>
+</dict>
+</plist>

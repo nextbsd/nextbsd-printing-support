@@ -1,0 +1,90 @@
+Description: Find launch_activate_socket() in liblaunch, not only in libc
+ Apple's CUPS enables launchd on-demand support (HAVE_LAUNCHD, HAVE_ONDEMAND)
+ when launch_activate_socket() links with no extra library, because on macOS
+ liblaunch is part of libSystem. On NextBSD it is a library of its own,
+ liblaunch (nextbsd/nextbsd-userland#447), so the check failed and cupsd was
+ built without on-demand support. When the function isn't in libc, look for
+ it in -llaunch and, if found, link it into cupsd only (ONDEMANDLIBS, which
+ only scheduler/Makefile's cupsd link uses). macOS is unchanged: there the
+ first check still succeeds. LAUNCHD_DIR stays Darwin-only, so CUPS's own
+ org.cups.* plists are not installed; NextBSD's org.nextbsd.cupsd.plist comes
+ from this repo.
+ .
+ The configure hunk is what autoconf 2.69 generates for the AC_CHECK_LIB added
+ to config-scripts/cups-startup.m4, written into Apple's generated configure
+ so the build needn't regenerate it.
+Origin: NextBSD
+Forwarded: not-needed (NextBSD-specific; macOS has launch_activate_socket in libSystem)
+---
+--- a/cups/config-scripts/cups-startup.m4
++++ b/cups/config-scripts/cups-startup.m4
+@@ -20,7 +20,13 @@
+ if test x$enable_launchd != xno; then
+ 	AC_CHECK_FUNC(launch_activate_socket, [
+ 		AC_DEFINE(HAVE_LAUNCHD)
+-		AC_DEFINE(HAVE_ONDEMAND)])
++		AC_DEFINE(HAVE_ONDEMAND)], [
++		dnl Not in libc (NextBSD): liblaunch is a library of its own,
++		dnl and only cupsd needs it.
++		AC_CHECK_LIB(launch, launch_activate_socket, [
++			AC_DEFINE(HAVE_LAUNCHD)
++			AC_DEFINE(HAVE_ONDEMAND)
++			ONDEMANDLIBS="-llaunch"])])
+ 	AC_CHECK_HEADER(launch.h, AC_DEFINE(HAVE_LAUNCH_H))
+ 
+ 	if test "$host_os_name" = darwin; then
+--- a/cups/configure
++++ b/cups/configure
+@@ -9012,6 +9012,52 @@
+ 		$as_echo "#define HAVE_LAUNCHD 1" >>confdefs.h
+ 
+ 		$as_echo "#define HAVE_ONDEMAND 1" >>confdefs.h
++
++else
++  		{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for launch_activate_socket in -llaunch" >&5
++$as_echo_n "checking for launch_activate_socket in -llaunch... " >&6; }
++if ${ac_cv_lib_launch_launch_activate_socket+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  ac_check_lib_save_LIBS=$LIBS
++LIBS="-llaunch  $LIBS"
++cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++/* Override any GCC internal prototype to avoid an error.
++   Use char because int might match the return type of a GCC
++   builtin and then its argument prototype would still apply.  */
++#ifdef __cplusplus
++extern "C"
++#endif
++char launch_activate_socket ();
++int
++main ()
++{
++return launch_activate_socket ();
++  ;
++  return 0;
++}
++_ACEOF
++if ac_fn_c_try_link "$LINENO"; then :
++  ac_cv_lib_launch_launch_activate_socket=yes
++else
++  ac_cv_lib_launch_launch_activate_socket=no
++fi
++rm -f core conftest.err conftest.$ac_objext \
++    conftest$ac_exeext conftest.$ac_ext
++LIBS=$ac_check_lib_save_LIBS
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_launch_launch_activate_socket" >&5
++$as_echo "$ac_cv_lib_launch_launch_activate_socket" >&6; }
++if test "x$ac_cv_lib_launch_launch_activate_socket" = xyes; then :
++
++			$as_echo "#define HAVE_LAUNCHD 1" >>confdefs.h
++
++			$as_echo "#define HAVE_ONDEMAND 1" >>confdefs.h
++
++			ONDEMANDLIBS="-llaunch"
++fi
+ 
+ fi
+ 

@@ -1,0 +1,41 @@
+Description: Build ippfind when mDNSResponder's dns_sd library is found
+ On platforms other than Darwin, cups-dnssd.m4 tests for a current dns_sd
+ library with AC_TRY_COMPILE, but a misplaced comma puts IPPFIND_BIN and
+ IPPFIND_MAN in the "not found" branch. With mDNSResponder found (NextBSD's
+ libdns_sd), CUPS got DNS-SD support but no ippfind(1), which macOS ships.
+ Move the two assignments into the "found" branch, in cups-dnssd.m4 and in
+ the generated configure.
+Origin: NextBSD (OpenPrinting CUPS 2.4 rewrote this check; ippfind is built
+ there whenever DNS-SD is)
+Forwarded: not-needed (Apple's CUPS is not developed in the open; fixed upstream in OpenPrinting CUPS 2.4)
+---
+--- a/cups/config-scripts/cups-dnssd.m4
++++ b/cups/config-scripts/cups-dnssd.m4
+@@ -60,9 +60,9 @@
+ 					AC_MSG_RESULT(yes)
+ 					AC_DEFINE(HAVE_DNSSD)
+ 					DNSSDLIBS="-ldns_sd"
+-					DNSSD_BACKEND="dnssd",
++					DNSSD_BACKEND="dnssd"
+ 					IPPFIND_BIN="ippfind"
+-					IPPFIND_MAN="ippfind.1"
++					IPPFIND_MAN="ippfind.1",
+ 					AC_MSG_RESULT(no))
+ 				LIBS="$SAVELIBS"
+ 				;;
+--- a/cups/configure
++++ b/cups/configure
+@@ -8970,10 +8970,10 @@
+ 
+ 					DNSSDLIBS="-ldns_sd"
+ 					DNSSD_BACKEND="dnssd"
+-else
+-  IPPFIND_BIN="ippfind"
++					IPPFIND_BIN="ippfind"
+ 					IPPFIND_MAN="ippfind.1"
+-					{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++else
++  					{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+ $as_echo "no" >&6; }
+ fi
+ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext

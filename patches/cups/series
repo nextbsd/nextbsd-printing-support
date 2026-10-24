@@ -1,0 +1,6 @@
+# Patches for Apple's CUPS (cups-522.4, CUPS 2.3.4), applied in this order with
+# -p1 from the top of the tag archive (Apple's tree keeps CUPS under cups/).
+0001-launchd-find-launch_activate_socket-in-liblaunch.patch
+0002-dnssd-build-ippfind-with-mdnsresponder.patch
+0003-build-outside-macos.patch
+0004-ipp-backend-link-without-macho-sections.patch
