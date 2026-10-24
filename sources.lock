@@ -1,0 +1,14 @@
+# sources.lock: every upstream source nextbsd-printing-support builds, pinned.
+#
+# One line per component:  <name> <version> <sha256> <url>
+# <name> matches build_<name> in build-printing-support.sh (hyphens as
+# underscores) and patches/<name>/. build-printing-support.sh downloads <url>
+# (cached in .build/dl), refuses it unless its SHA-256 is <sha256>, and unpacks
+# it. Only upstream release tarballs or tag archives are listed: no FreeBSD
+# packages or ports distfiles. Bumping a version is a deliberate change to this
+# file.
+
+# ---- shipped in NextBSD-printing-support ----
+# Apple's CUPS, tag cups-522.4 = CUPS 2.3.4 (plan E24 D5). GitHub's tag archive
+# of apple-oss-distributions/cups; Apple's tree keeps CUPS itself under cups/.
+cups          522.4   8bd2e5bca970ca89a2b3f5f002f818b978b9d2f32a528790552798d197475c39  https://github.com/apple-oss-distributions/cups/archive/refs/tags/cups-522.4.tar.gz
