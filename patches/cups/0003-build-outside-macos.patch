@@ -8,13 +8,52 @@ Description: Build Apple's CUPS outside macOS
     __Require_noErr_Action), and stops with #error when the managed
     configuration API isn't there;
   - backend/ipp.c includes <os/log.h> unguarded, though nothing in it uses
-    os_log.
+    os_log;
+  - http.c retries a TLS handshake on SecureTransport's
+    errSSLWeakPeerEphemeralDHKey, compares with Objective-C's nil, and calls
+    the telemetry blocks that http-private.h declares only #if __BLOCKS__;
+  - adminutil.c asks confstr() for _CS_DARWIN_USER_TEMP_DIR;
+  - tls-gnutls.c's httpDeleteCredentials() stub has a typo, "void)";
+  - scheduler/job.c returns CoreFoundation's Boolean.
  Include <stdbool.h>; keep the Apple headers and the #error for __APPLE__;
  elsewhere define the two AssertMacros.h checks with their macOS meaning.
- macOS builds are unchanged.
+ Guard the SecureTransport retry with HAVE_CDSASSL and the telemetry calls
+ with __BLOCKS__, as their declarations are; use NULL, bool, (void) and
+ $TMPDIR (else /tmp) where macOS has nil, Boolean and its per-user temporary
+ directory. macOS builds are unchanged.
 Origin: NextBSD
 Forwarded: not-needed (Apple's CUPS is built only for macOS)
 ---
+--- a/cups/backend/ipp.c
++++ b/cups/backend/ipp.c
+@@ -18,7 +18,9 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <sys/wait.h>
+-#include <os/log.h>
++#ifdef __APPLE__
++#  include <os/log.h>
++#endif /* __APPLE__ */
+ 
+ #if defined(HAVE_GSSAPI) && defined(HAVE_XPC)
+ #  include <xpc/xpc.h>
+--- a/cups/cups/adminutil.c
++++ b/cups/cups/adminutil.c
+@@ -410,9 +410,14 @@
+ {
+   // Create the temporary file template
+   char    tmppath[1024];    /* Temporary directory */
++#ifdef _CS_DARWIN_USER_TEMP_DIR
+   if (!confstr(_CS_DARWIN_USER_TEMP_DIR, tmppath, sizeof(tmppath))) {
+     strncpy(tmppath, "/private/tmp", sizeof(tmppath));  /* This should never happen */
+   }
++#else
++  const char *tmpdir = getenv("TMPDIR");
++  strlcpy(tmppath, (tmpdir && *tmpdir) ? tmpdir : "/tmp", sizeof(tmppath));
++#endif /* _CS_DARWIN_USER_TEMP_DIR */
+   strlcat(tmppath, "/XXXXXX", sizeof(tmppath));
+   
+   int tempFD = mkstemp(tmppath);
 --- a/cups/cups/http-private.h
 +++ b/cups/cups/http-private.h
 @@ -19,6 +19,7 @@
@@ -25,6 +64,72 @@ Forwarded: not-needed (Apple's CUPS is built only for macOS)
  
  #  ifdef __sun
  #    include <sys/select.h>
+--- a/cups/cups/http.c
++++ b/cups/cups/http.c
+@@ -2528,11 +2528,13 @@
+                       int    *cancel)    /* I - Pointer to "cancel" variable */
+ {
+   int result = _httpReconnect2_inner(http, msec, cancel);
++#ifdef HAVE_CDSASSL
+   if (result != 0 && http != NULL && http->error == errSSLWeakPeerEphemeralDHKey && http->status == HTTP_STATUS_ERROR) {
+       // try again with disableDH
+       http->disableDH = true;
+       result = _httpReconnect2_inner(http, msec, cancel);
+   }
++#endif /* HAVE_CDSASSL */
+   return result;
+ }
+ 
+@@ -2994,7 +2996,7 @@
+     }
+     else {
+       DEBUG_printf(("1_httpUpdate: unknown field %s seen!", line));
+-      if (http->extra_headers == nil) {
++      if (http->extra_headers == NULL) {
+         http->extra_headers = cupsArrayNew3(_http_header_comp, NULL, NULL, 0, _http_header_copy, _http_header_free);
+       }
+       http_header_extra_t hh = { line, value };
+@@ -4322,12 +4324,14 @@
+     if (getenv("CUPS_HTTP_TRACE") != NULL) {
+       cupsDumpHex(http->tls? "TLS-READ" : "RAW-READ", buffer, (size_t) bytes);
+     }
++#if __BLOCKS__
+     _http_telemetry_block_t cb = _httpGetTelemetryBlock(http, CFSTR("HTTPRead"));
+     if (cb) {
+       CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const unsigned char*) buffer, (CFIndex) bytes);
+       cb(http, CFSTR("HTTPRead"), data);
+       CFRelease(data);
+     }
++#endif /* __BLOCKS__ */
+   }
+   
+   if (bytes < 0)
+@@ -4923,12 +4927,14 @@
+     if (getenv("CUPS_HTTP_TRACE") != NULL) {
+       cupsDumpHex(http->tls? "TLS-SEND" : "RAW-SEND", buffer, (size_t) length);
+     }
++#if __BLOCKS__
+     _http_telemetry_block_t cb = _httpGetTelemetryBlock(http, CFSTR("HTTPWrite"));
+     if (cb) {
+       CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const unsigned char*) buffer, (CFIndex) length);
+       cb(http, CFSTR("HTTPWrite"), data);
+       CFRelease(data);
+     }
++#endif /* __BLOCKS__ */
+ 
+ #ifdef HAVE_SSL
+     if (http->tls)
+--- a/cups/cups/tls-gnutls.c
++++ b/cups/cups/tls-gnutls.c
+@@ -890,7 +890,7 @@
+ int
+ httpDeleteCredentials(const char *common_name)
+ {
+- void)common_name;
++ (void)common_name;
+  return -1;
+ }
+ 
 --- a/cups/scheduler/conf.c
 +++ b/cups/scheduler/conf.c
 @@ -34,8 +34,20 @@
@@ -59,16 +164,14 @@ Forwarded: not-needed (Apple's CUPS is built only for macOS)
  #error "check build flags - we should have this"
  #endif
  
---- a/cups/backend/ipp.c
-+++ b/cups/backend/ipp.c
-@@ -18,7 +18,9 @@
- #include <sys/types.h>
- #include <sys/stat.h>
- #include <sys/wait.h>
--#include <os/log.h>
-+#ifdef __APPLE__
-+#  include <os/log.h>
-+#endif /* __APPLE__ */
+--- a/cups/scheduler/job.c
++++ b/cups/scheduler/job.c
+@@ -1610,7 +1610,7 @@
+   cupsdUnlinkOrRemoveFile(path);
+ }
  
- #if defined(HAVE_GSSAPI) && defined(HAVE_XPC)
- #  include <xpc/xpc.h>
+-static Boolean isEntryInJobArray(struct Entries* e)
++static bool isEntryInJobArray(struct Entries* e)
+ {
+   // this works for [ac]XXXXX and dXXXXX-YYY; atoi stops at the -
+   int num = atoi(&e->name[1]);
