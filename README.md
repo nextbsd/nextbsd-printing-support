@@ -152,7 +152,7 @@ not listed in it, and a patch without an `Origin:` line.
 
 ## Build model
 
-`build-printing-support.sh` runs inside the `nextbsd-kernel-toolchain`
+`build-printing-support.sh` runs inside the `nextbsd-toolchain`
 container (the pinned clang/lld 19.1.7, pkgconf, autotools) with a sysroot
 made of, in order: compat's `continuous` base, then the `continuous` artifacts
 of nextbsd-userland (liblaunch, `dns_sd`) and nextbsd-gnustep-support (GnuTLS).
