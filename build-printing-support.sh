@@ -30,7 +30,7 @@
 # no systemd.
 #
 # EXECUTION CONTEXT (set up by CI before this runs)
-#   Inside the nextbsd-kernel-toolchain container (pinned clang/lld 19.1.7 in
+#   Inside the nextbsd-toolchain container (pinned clang/lld 19.1.7 in
 #   $CROSS_BINDIR, pkgconf, autotools), with compat's `continuous` base, then
 #   nextbsd-userland's and nextbsd-gnustep-support's `continuous` artifacts,
 #   extracted into $SYSROOT. $SYSROOT is scratch: this script installs every

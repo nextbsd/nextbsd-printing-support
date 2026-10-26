@@ -3,7 +3,7 @@ name: Build NextBSD printing-support (Apple's CUPS)
 # Cross-builds NextBSD's printing system (E24, nextbsd/nextbsd#574, plan D5,
 # step 10): Apple's CUPS 2.3.4 (cups-522.4) into /usr, plus the
 # org.nextbsd.cupsd launchd job, for amd64 and arm64 on the x86_64 runner,
-# inside the per-arch nextbsd-kernel-toolchain container, from the pinned
+# inside the per-arch nextbsd-toolchain container, from the pinned
 # tarball in sources.lock. The sysroot is compat's `continuous` base with the
 # `continuous` artifacts of nextbsd-userland (liblaunch, mDNSResponder's
 # dns_sd) and nextbsd-gnustep-support (GnuTLS) on top.
@@ -42,7 +42,7 @@ jobs:
       # Per-arch toolchain image: the pinned llvmorg-19.1.7 clang, lld and LLVM
       # binutils at $CROSS_BINDIR, plus pkgconf and the autotools
       # (nextbsd-toolchain#13). Nothing is apt-installed here.
-      image: ghcr.io/nextbsd/nextbsd-kernel-toolchain:${{ matrix.arch }}-${{ inputs.fbsd_sha && format('fbsd-{0}', inputs.fbsd_sha) || 'latest' }}
+      image: ghcr.io/nextbsd/nextbsd-toolchain:${{ matrix.arch }}-${{ inputs.fbsd_sha && format('fbsd-{0}', inputs.fbsd_sha) || 'latest' }}
     steps:
       - uses: actions/checkout@v4
 
