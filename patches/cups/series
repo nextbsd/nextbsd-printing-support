@@ -4,3 +4,6 @@
 0002-dnssd-build-ippfind-with-mdnsresponder.patch
 0003-build-outside-macos.patch
 0004-ipp-backend-link-without-macho-sections.patch
+0005-scheduler-peer-credentials-on-freebsd.patch
+0006-scheduler-create-missing-parent-directories.patch
+0007-mime-pass-pdf-to-driverless-printers.patch

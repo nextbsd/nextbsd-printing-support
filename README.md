@@ -84,6 +84,9 @@ asserts what it found (`HAVE_LAUNCHD`, `HAVE_DNSSD`, `HAVE_GNUTLS`,
 | `0002-dnssd-build-ippfind-with-mdnsresponder` | A misplaced comma in `cups-dnssd.m4` dropped `ippfind` whenever mDNSResponder was found outside Darwin |
 | `0003-build-outside-macos` | Apple's macOS-only additions that never compiled elsewhere: unguarded `<os/log.h>` and `<AssertMacros.h>` (`cupsdCheckPermissions()` uses `__Require_Action`), an `#error` without the managed-configuration API, `bool` without `<stdbool.h>`, SecureTransport's DH retry, `nil`, CoreFoundation's `Boolean`, the `__BLOCKS__` telemetry calls, `_CS_DARWIN_USER_TEMP_DIR`, and a typo in a GnuTLS stub. macOS builds are unchanged |
 | `0004-ipp-backend-link-without-macho-sections` | `backend/Makefile` links `ipp` with a Mach-O `__info_plist` section and runs `codesign`; both are kept for Darwin only |
+| `0005-scheduler-peer-credentials-on-freebsd` | cupsd's `PeerCred` check asked for the peer's uid with `getsockopt(SOL_SOCKET, SO_PEERCRED)` off macOS. FreeBSD has no `SO_PEERCRED`, so CUPS defines it as `LOCAL_PEERCRED` (1), which at the `SOL_SOCKET` level is `SO_DEBUG`: cupsd compared stack garbage with the user's uid ("got 574, expected 0") and refused admin requests over `/var/run/cupsd`. FreeBSD, like macOS, takes `LOCAL_PEERCRED` at level 0 (`SOL_LOCAL`) and fills a `struct xucred`; the same change as FreeBSD's port |
+| `0006-scheduler-create-missing-parent-directories` | cupsd creates its directories at every start, but not their parents, and one failure skips the rest. NextBSD's `/var` has no `spool`, so `/var/spool/cups` (and its `tmp` and `cache`), `/var/run/cups` and its `certs` were never made. cupsd now makes the missing parents (root, `0755`) and also creates `/etc/cups/ssl`, which it only checked |
+| `0007-mime-pass-pdf-to-driverless-printers` | IPP Everywhere queues for printers that accept PDF want `application/vnd.cups-pdf`, which needs cups-filters' `pdftopdf`. Until it is built, `mime.convs` passes PDF to them unchanged (a null filter, cost 100); the printer applies the job options the ipp backend sends. `pdftopdf` (cost 66) replaces it when installed |
 
 ### launchd: `org.nextbsd.cupsd`
 
@@ -106,6 +109,34 @@ NextBSD:
 - **Silent.** cupsd logs to `/var/log/cups/` (`error_log`, `access_log`,
   `page_log`); its stdout/stderr go to `/var/log/cupsd.stderr`. Apple's
   `CUPS_DEBUG_*` environment and the macOS-only keys are dropped.
+
+### Directories cupsd creates
+
+The package ships no `/var`: cupsd checks and, when missing, creates these
+every time it starts (patch 0006), with the owners and modes CUPS's own
+install uses. `/var/run/cups` is therefore back after a boot that clears
+`/var/run`.
+
+| Directory | Owner | Mode |
+|---|---|---|
+| `/var/spool/cups` (RequestRoot) | `root:_lp` | `0710` |
+| `/var/spool/cups/tmp` (TempDir) | `root:_lp` | `1770` |
+| `/var/spool/cups/cache` (CacheDir), `cache/rss` | `root:_lp` | `0770`, `0775` |
+| `/var/run/cups` (StateDir) | `root:_lp` | `0755` |
+| `/var/run/cups/certs` | `_lp:admin` | `0511` |
+| `/etc/cups/ppd` | `root:_lp` | `0755` |
+| `/etc/cups/ssl` | `root:_lp` | `0700` |
+
+Missing parents (`/var/spool` on NextBSD) are made `root:wheel`, `0755`.
+
+### Printing PDF before cups-filters
+
+CUPS 2.3 has no PDF filters of its own; `pdftopdf` and the rasterisers come
+from cups-filters, a later step. Until then (patch 0007) a PDF goes unchanged
+to a driverless queue whose printer accepts PDF. What `pdftopdf` does on the
+host (`number-up`, `page-ranges`, `fit-to-page`) isn't applied, and a printer
+that takes only PWG Raster or Apple Raster still refuses PDF ("Unsupported
+document-format").
 
 ### Accounts and configuration (nextbsd-overlays)
 
