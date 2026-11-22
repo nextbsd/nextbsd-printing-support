@@ -1,0 +1,39 @@
+Description: Pass PDF unchanged to driverless queues until there is a pdftopdf
+ A queue made with `lpadmin -m everywhere` for a printer that accepts PDF
+ gets the PPD line `*cupsFilter2: "application/vnd.cups-pdf application/pdf
+ 10 -"`, so a PDF job needs an application/pdf -> application/vnd.cups-pdf
+ filter. CUPS 2.3 doesn't have one: pdftopdf comes from cups-filters, which
+ NextBSD doesn't build yet, so cupsd refused PDF with "Unsupported
+ document-format". Add a null ("-") filter for that step, as mime.convs
+ already does for raw printing. cupsd drops null filters, and the ipp
+ backend, seeing a PDF final content type, sends the job options (copies,
+ sides, media, ...) for the printer to apply. What only pdftopdf does
+ (number-up, page-ranges, fit-to-page done on the host) is not applied.
+ The cost, 100, is above pdftopdf's 66, so cups-filters' line replaces this
+ one once it is installed. Printers that take only PWG Raster or Apple
+ Raster still need a rasteriser (cups-filters with Ghostscript or Poppler).
+Origin: NextBSD
+Forwarded: not-needed (Apple's CUPS is built only for macOS, which has its own PDF filters)
+---
+--- a/cups/conf/mime.convs.in
++++ b/cups/conf/mime.convs.in
+@@ -35,6 +35,19 @@
+ 
+ application/postscript		application/vnd.cups-postscript	66	pstops
+ 
++########################################################################
++#
++# PDF filters
++#
++# NextBSD doesn't ship cups-filters yet, so there is no pdftopdf. Driverless
++# (IPP Everywhere) queues for printers that accept PDF take
++# application/vnd.cups-pdf: pass PDF to them unchanged, and the ipp backend
++# sends the job options for the printer to apply. cups-filters' pdftopdf
++# (cost 66) takes over from this line once it is installed.
++#
++
++application/pdf			application/vnd.cups-pdf	100	-
++
+ ########################################################################
+ #
+ # Raster filters...

@@ -1,0 +1,96 @@
+Description: Create cupsd's missing parent directories and /etc/cups/ssl
+ cupsd checks and creates its directories at start (RequestRoot
+ /var/spool/cups, its tmp and cache, StateDir /var/run/cups and its certs,
+ /etc/cups/ppd) with the owners and modes CUPS's own install uses, but only
+ the last path component: mkdir() fails when /var/spool itself is missing,
+ as it is on NextBSD, and because the checks are one `||` chain the first
+ failure skips every directory after it. cupsd then runs without a spool,
+ temporary, cache or certificate directory, and requests fail with
+ "Request Entity Too Large" (no TempDir) or "Unauthorized" (no root
+ certificate). Create the missing parents of RequestRoot, CacheDir and
+ StateDir first, owned by root with mode 0755 as hier(7) has them. Since
+ cupsd does this every time it starts, directories under /var/run come back
+ after a boot that clears it.
+ .
+ /etc/cups/ssl (ServerKeychain, 0700 root:_lp in CUPS's install) is checked
+ but never created; create it too, as cupsd already does for /etc/cups/ppd.
+Origin: NextBSD
+Forwarded: not-needed (Apple's CUPS is built only for macOS)
+---
+--- a/cups/scheduler/conf.c
++++ b/cups/scheduler/conf.c
+@@ -205,6 +205,7 @@ static const unsigned	zeros[4] =
+ static http_addrlist_t	*get_address(const char *value, int defport);
+ static int		get_addr_and_mask(const char *value, unsigned *ip,
+ 			                  unsigned *mask);
++static void		make_parent_dirs(const char *path);
+ static void		mime_error_cb(void *ctx, const char *message);
+ static int		parse_aaa(cupsd_location_t *loc, char *line,
+ 			          char *value, int linenum);
+@@ -1115,6 +1116,10 @@ cupsdReadConfiguration(void)
+ 
+   snprintf(temp, sizeof(temp), "%s/rss", CacheDir);
+ 
++  make_parent_dirs(RequestRoot);
++  make_parent_dirs(CacheDir);
++  make_parent_dirs(StateDir);
++
+   if ((cupsdCheckPermissions(RequestRoot, NULL, 0710, RunUser,
+ 			     Group, 1, 1) < 0 ||
+        cupsdCheckPermissions(CacheDir, NULL, 0770, RunUser,
+@@ -1130,7 +1135,7 @@ cupsdReadConfiguration(void)
+        cupsdCheckPermissions(ServerRoot, "ppd", 0755, RunUser,
+ 			     Group, 1, 1) < 0 ||
+        cupsdCheckPermissions(ServerRoot, "ssl", 0700, RunUser,
+-			     Group, 1, 0) < 0 ||
++			     Group, 1, 1) < 0 ||
+        cupsdCheckPermissions(ServerRoot, "classes.conf", 0600, RunUser,
+ 			     Group, 0, 0) < 0 ||
+        cupsdCheckPermissions(ServerRoot, "printers.conf", 0600, RunUser,
+@@ -2034,6 +2039,46 @@ get_addr_and_mask(const char *value,	/* I - String from config file */
+ }
+ 
+ 
++/*
++ * 'make_parent_dirs()' - Create the missing parent directories of a path.
++ *
++ * cupsdCheckPermissions() creates a missing directory but not its parents.
++ * On a system whose /var has no spool directory (NextBSD's has none) the
++ * first check fails, and with it RequestRoot, the cache, temporary and state
++ * directories are never created.  Parents are made owned by root with mode
++ * 0755, as hier(7) has them.
++ */
++
++static void
++make_parent_dirs(const char *path)	/* I - Directory whose parents to make */
++{
++  char	temp[1024],			/* Copy of path */
++	*ptr;				/* Pointer into copy */
++
++
++  if (!path || path[0] != '/' || strlcpy(temp, path, sizeof(temp)) >= sizeof(temp))
++    return;
++
++  for (ptr = strchr(temp + 1, '/'); ptr; ptr = strchr(ptr + 1, '/'))
++  {
++    *ptr = '\0';
++
++    if (mkdir(temp, 0755) == 0)
++    {
++      chmod(temp, 0755);
++      cupsdLogMessage(CUPSD_LOG_DEBUG, "Created missing directory \"%s\"", temp);
++    }
++    else if (errno != EEXIST)
++    {
++      cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to create directory \"%s\" - %s", temp, strerror(errno));
++      return;
++    }
++
++    *ptr = '/';
++  }
++}
++
++
+ /*
+  * 'mime_error_cb()' - Log a MIME error.
+  */
